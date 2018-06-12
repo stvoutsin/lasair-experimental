@@ -1,0 +1,85 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2018, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+## Add ssh Proxy Configuration for lasair-db
+nano .ssh/config
+..
+
+    Host lasair-db Lasair-db
+        User user
+        IdentityFile rsa
+        ProxyCommand ssh -W %h:%p user@lasair.roe.ac.uk
+        Protocol 2
+        ForwardAgent yes
+        PasswordAuthentication no
+
+..
+
+
+## Install libmyodbc
+apt-get install libmyodbc
+
+
+
+## install pyrosql (Github)
+
+
+
+## Edit odbcinst.ini configuration
+nano /etc/odbcinst.ini
+..
+[ODBC Drivers]
+TDS             = Installed
+
+[TDS]
+Description     = TDS driver (Sybase/MS SQL)
+Driver          = /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so
+Setup           = /usr/lib/x86_64-linux-gnu/odbc/libtdsS.so
+FileUsage       = 1
+
+[ODBC]
+Trace           = No
+TraceFile       = /tmp/sql.log
+ForceTrace      = No
+Pooling         = No
+
+[MySQL]
+Description = ODBC for MySQL
+Driver = /usr/lib/x86_64-linux-gnu/odbc/libmyodbc.so
+FileUsage = 1
+..
+
+
+
+## Tunnel connection to lasair database
+ssh -L 3306:localhost:3306 stv@lasair-db
+
+
+
+# Run Python example
+python3 # Or Jupyter Notebook example
+..
+
+import pyrosql
+psql = pyrosql.PyroSQL("127.0.0.1", "", "", "3306", "MySQL")
+t = psql.execute_sql_query_get_rows("select jd, magpsf from candidates limit 3;", "ztf")
+

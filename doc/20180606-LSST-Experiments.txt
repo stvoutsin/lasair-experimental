@@ -252,10 +252,8 @@ docker service create \
 	sudo pip install py4j==0.9
 	pip3 install py4j==0.9
 	pip3 install pyspark
-	apt-get install java
 	apt-get install default-jre
 	update-alternatives --config java
-	nano /etc/environment
         export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64/
 
 
