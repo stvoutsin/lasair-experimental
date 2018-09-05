@@ -20,7 +20,9 @@
 #
 #
 
+#---------------------------------------------
 ## Add ssh Proxy Configuration for lasair-db
+#---------------------------------------------
 nano .ssh/config
 ..
 
@@ -35,16 +37,20 @@ nano .ssh/config
 ..
 
 
+#---------------------------------------------
 ## Install libmyodbc
+#---------------------------------------------
 apt-get install libmyodbc
+apt-get install unixodbc unixodbc-dev
 
 
-
+#---------------------------------------------
 ## install pyrosql (Github)
+#---------------------------------------------
 
-
-
+#---------------------------------------------
 ## Edit odbcinst.ini configuration
+#---------------------------------------------
 nano /etc/odbcinst.ini
 ..
 [ODBC Drivers]
@@ -69,17 +75,51 @@ FileUsage = 1
 ..
 
 
-
+#---------------------------------------------
 ## Tunnel connection to lasair database
+#---------------------------------------------
 ssh -L 3306:localhost:3306 stv@lasair-db
 
 
-
-# Run Python example
+#---------------------------------------------
+## Run Python example
+#---------------------------------------------
 python3 # Or Jupyter Notebook example
 ..
 
 import pyrosql
 psql = pyrosql.PyroSQL("127.0.0.1", "", "", "3306", "MySQL")
 t = psql.execute_sql_query_get_rows("select jd, magpsf from candidates limit 3;", "ztf")
+t.count()
+table = t.as_astropy()
+
+
+
+#---------------------------------------------
+## Run in Notebook
+#---------------------------------------------
+pip3 install ipywidgets
+pip3 install plotly
+pip3 install cufflinks
+
+#--------------------------------------------
+## Install iPyAladin
+#--------------------------------------------
+
+
+   git clone https://github.com/cds-astro/ipyaladin
+   cd ipyaladin/
+   sudo pip install -e .
+   jupyter nbextension enable --py widgetsnbextension
+   jupyter nbextension install --py --symlink --sys-prefix ipyaladin
+   nano /home/stelios/ipyaladin/ipyaladin/aladin_widget.py 
+   # .. Fix error line 221
+   sudo jupyter nbextension install --py --symlink --sys-prefix ipyaladin
+   sudo           jupyter nbextension enable ipyaladin --py --sys-prefix
+
+jupyter-notebook
+
+
+
+
 
