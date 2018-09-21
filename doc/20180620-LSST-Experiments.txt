@@ -1,0 +1,418 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2018, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+#--------------------------------------------------
+## Install GLFS
+#--------------------------------------------------
+
+wget https://github.com/git-lfs/git-lfs/releases/download/v2.4.2/git-lfs-linux-amd64-2.4.2.tar.gz
+
+tar -xzvf git-lfs-linux-amd64-2.4.2.tar.gz 
+
+pushd git-lfs-2.4.2/
+    source install.sh
+    git lfs install
+
+popd
+
+
+## "First, add these lines into your ~/.gitconfig file:"
+..
+
+	# Cache anonymous access to DM Git LFS S3 servers
+	[credential "https://lsst-sqre-prod-git-lfs.s3-us-west-2.amazonaws.com"]
+	    helper = store
+	[credential "https://s3.lsst.codes"]
+	    helper = store
+..
+
+
+##  Then add these lines into your ~/.git-credentials files (create one, if necessary):
+
+..
+	https://:@lsst-sqre-prod-git-lfs.s3-us-west-2.amazonaws.com
+	https://:@s3.lsst.codes
+	### Alert stream system using Kafka
+..
+
+
+
+
+
+
+
+
+
+
+#--------------------------------------------------
+## Test LSST Alert Stream using Kafka
+#--------------------------------------------------
+
+# Clone Alert Stream Repository
+git clone https://github.com/lsst-dm/alert_stream ~/projects/alert_stream
+
+...
+	Cloning into 'alert_stream'...
+	remote: Counting objects: 639, done.
+	remote: Compressing objects: 100% (31/31), done.
+	remote: Total 639 (delta 35), reused 57 (delta 31), pack-reused 573
+	Receiving objects: 100% (639/639), 88.62 KiB | 0 bytes/s, done.
+	Resolving deltas: 100% (358/358), done.
+	Checking connectivity... done.
+	Downloading data/alerts_11574.avro (21 MB)
+	Downloading data/alerts_11575.avro (25 MB)
+	Downloading data/alerts_11576.avro (24 MB)
+	Downloading data/alerts_11577.avro (23 MB)
+
+..
+
+
+## When using Git LFS, it will fetch the full avro alerts using the lfs links
+
+
+pushd ~/projects/alert_stream
+
+	# Run compose
+	docker-compose up -d
+
+
+	# Build alert_stream
+	docker build -t "alert_stream" .
+
+	# Get alert_stream help info
+	docker run -it --rm alert_stream python bin/sendAlertStream.py -h
+
+		usage: sendAlertStream.py [-h] [--encode | --encode-off] topic avrofile
+
+		Generates batches of alerts coming from a CCD given template alert content.
+
+		positional arguments:
+		  topic         Name of Kafka topic stream to push to.
+		  avrofile      File from which to read alerts.
+
+		optional arguments:
+		  -h, --help    show this help message and exit
+		  --encode      Encode to Avro format. (default)
+		  --encode-off  Do not encode to Avro format.
+
+
+	# Send alerts of visit, e.g. 11577, to topic “my-stream”:
+
+	 docker run -it --rm \
+	      --network=alertstream_default \
+	      -v $PWD/data:/home/data:ro \
+	      alert_stream python bin/sendAlertStream.py my-stream alerts_11577.avro
+
+	#  Consume alert stream
+	#  To start a consumer for printing all alerts in the stream "my-stream" to screen:
+
+	$docker run -it --rm \
+	      --network=alertstream_default \
+	      alert_stream python bin/printStream.py my-stream
+
+
+popd
+
+
+
+#--------------------------------------------------
+## Spark Streaming from Kafka
+#--------------------------------------------------
+
+# https://www.rittmanmead.com/blog/2017/01/getting-started-with-spark-streaming-with-python-and-kafka/
+
+# Checkout specific alert stream branch (Notes on Spark Experiments don't work with default branch)
+
+pushd ~/projects/alert_stream
+
+	# Checkout working branch
+	git checkout dmtn-028-2018-03-29
+
+ 
+	# Compose up
+        docker-compose up -d
+
+	# Build Alert stream image
+	docker build -t "alert_stream" .
+
+
+	# Run kafka consumer listening to "my-stream"
+	docker run -it \
+	      --network=alertstream_default \
+	      alert_stream python3 bin/printStream.py my-stream
+
+
+	# Run kafka producer, which will repeatdly send 10 alerts to "my-stream"
+	 docker run -it \
+	      --network=alertstream_default \
+	      alert_stream python bin/sendAlertStream.py my-stream 10 --no-stamps --repeat 
+
+popd
+
+
+
+# Stop all containers
+
+docker rm -f $(docker ps -a -q)
+
+
+
+#--------------------------------------------------
+## Docker Swarm mode
+#--------------------------------------------------
+
+# Create overlay network
+
+docker network create --driver overlay kafkanet
+
+
+# Start a zookeeper service:
+
+docker service create \
+    --name zookeeper \
+    --network host \
+    -p 32181 \
+    -e ZOOKEEPER_CLIENT_PORT=32181 \
+    -e ZOOKEEPER_TICK_TIME=2000 \
+    confluentinc/cp-zookeeper:3.2.0
+
+
+
+# Start a kafka service:
+
+docker service create \
+    --name kafka \
+    --network host \
+    -p 9092 \
+    -e KAFKA_BROKER_ID=1 \
+    -e KAFKA_ZOOKEEPER_CONNECT=zookeeper:32181 \
+    -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092 \
+    confluentinc/cp-kafka:3.2.0
+
+
+
+# Start stream of bursts of 10 alerts to the topic named 'my-stream':
+
+docker service create \
+    --name producer1 \
+    --network kafkanet \
+    -e PYTHONUNBUFFERED=0 \
+    alert_stream python bin/sendAlertStream.py my-stream 10 --repeat
+
+
+
+# Listen and print alerts:
+
+docker service create \
+    --name consumer1 \
+    --network kafkanet \
+    -e PYTHONUNBUFFERED=0 \
+    alert_stream python bin/printStream.py my-stream
+
+
+
+# Start group for monitoring alerts:
+
+docker service create \
+    --name consumer2 \
+    --network kafkanet \
+    -e PYTHONUNBUFFERED=0 \
+    alert_stream python bin/monitorStream.py my-stream --group monitor-group
+
+
+
+docker service create \
+    --name jupyter \
+    --network kafkanet \
+    -e PYTHONUNBUFFERED=0 \
+   -p 8888:8888 \
+   jupyterhub/jupyterhub
+
+
+
+
+# Create container and install spark
+
+# Run kafka producer, which will repeatdly send 100 alerts to "my-stream"
+ docker run -it \
+      --network=alertstream_default \
+      alert_stream bash
+
+...
+        # Install spark and requirements
+
+	apt-get update
+	apt-get install nano
+	curl http://d3kbcqa49mib13.cloudfront.net/spark-1.6.2-bin-hadoop2.6.tgz | tar -xzf - -C . && mv spark-1.6.2-bin-hadoop2.6 spark
+	sudo pip install py4j==0.9
+	pip3 install py4j==0.9
+	pip3 install pyspark
+	apt-get install default-jre
+	update-alternatives --config java
+        export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64/
+
+
+...
+
+
+python3
+
+...
+
+import os
+os.environ['PYSPARK_SUBMIT_ARGS'] = '--packages org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0,org.apache.spark:spark-sql-kafka-0-10_2.11:2.1.0,com.databricks:spark-avro_2.11:3.2.0 pyspark-shell'
+
+from ast import literal_eval
+
+from pyspark import SparkContext
+from pyspark.streaming import StreamingContext
+from pyspark.streaming.kafka import KafkaUtils
+
+# create spark and streaming contexts
+sc = SparkContext("local[*]", "KafkaDirectStream")
+ssc = StreamingContext(sc, 10)
+
+# defining the checkpoint directory
+ssc.checkpoint("/tmp")
+
+kafkaStream = KafkaUtils.createDirectStream(ssc, ['my-stream'], {'bootstrap.servers': 'kafka:9092',
+            'auto.offset.reset': 'smallest', 'group.id': 'b6d11da56d70' })   ## or 'group.id': 'spark-group'
+
+
+kafkaStream.pprint()
+
+alert_dstream = kafkaStream.map(lambda alert: literal_eval(alert[1]))
+alert_dstream.count().map(lambda x:'Alerts in this window: %s' % x).pprint()  
+alert_dstream.pprint()
+def map_alertId(alert):
+    return alert['alertId']
+alertId_dstream = alert_dstream.map(map_alertId)
+alertId_dstream.count().map(lambda x:'AlertId alerts in this window: %s' % x).pprint()  
+alertId_dstream.pprint()
+def filter_allRa(alert):
+    return alert['diaSource']['ra'] > 350
+filter_all = alert_dstream.filter(filter_allRa)
+filter_all.count().map(lambda x:'Filter_all alerts in this window: %s' % x).pprint()  
+filter_all.pprint()
+def filter_emptyRa(alert):
+    return alert['diaSource']['ra'] < 350
+filter_empty = alert_dstream.filter(filter_emptyRa)
+filter_empty.count().map(lambda x:'Filter_empty alerts in this window: %s' % x).pprint()  
+filter_empty.pprint()
+
+ssc.start()
+ssc.awaitTermination()
+
+
+.....
+
+
+ 134141}, 'arc': 2.124124, 'orbFitLnL': 1343141.0341, 'orbFitChi2': 1341421.2414, 'orbFitNdata': 1214, 'MOID1': 3141.0, 'MOID2': 23432.423, 'moidLon1': 2143.213, 'moidLon2': 3142.23123, 'uH': 13231.231, 'uHErr': 13213.213, 'uG1': 32131.312, 'uG1Err': 31232.2132, 'uG2': 231.2313, 'uG2Err': 23132.231, 'flags': 0}, 'diaObjectL2': {'diaObjectId': 281323062375219201, 'ra': 351.570546978, 'decl': 0.126243049656, 'ra_decl_Cov': {'raSigma': 0.00028, 'declSigma': 0.00028, 'ra_decl_Cov': 0.00029}, 'radecTai': 1480360995, 'pmRa': 0.00013, 'pmDecl': 0.00014, 'parallax': 2.124124, 'pm_parallax_Cov': {'pmRaSigma': 0.00013, 'pmDeclSigma': 0.00013, 'parallaxSigma': 0.00013, 'pmRa_pmDecl_Cov': 0.00013, 'pmRa_parallax_Cov': 0.00013, 'pmDecl_parallax_Cov': 0.00013}, 'pmParallaxLnL': 0.00013, 'pmParallaxChi2': 0.00013, 'pmParallaxNdata': 1214, 'flags': 0}, 'diaSourcesL2': [{'diaSourceId': 281323062375219198, 'ccdVisitId': 111111, 'midPointTai': 1480360995, 'filterName': 'r', 'ra': 351.570546978, 'decl': 0.126243049656, 'ra_decl_Cov': {'raSigma': 0.00028, 'declSigma': 0.00028, 'ra_decl_Cov': 0.00029}, 'x': 112.1, 'y': 121.1, 'x_y_Cov': {'xSigma': 1.2, 'ySigma': 1.1, 'x_y_Cov': 1.2}, 'snr': 41.1, 'psFlux': 1241.0, 'flags': 0}, {'diaSourceId': 281323062375219199, 'ccdVisitId': 111111, 'midPointTai': 1480360995, 'filterName': 'r', 'ra': 351.570546978, 'decl': 0.126243049656, 'ra_decl_Cov': {'raSigma': 0.00028, 'declSigma': 0.00028, 'ra_decl_Cov': 0.00029}, 'x': 112.1, 'y': 121.1, 'x_y_Cov': {'xSigma': 1.2, 'ySigma': 1.1, 'x_y_Cov': 1.2}, 'snr': 41.1, 'psFlux': 1241.0, 'flags': 0}]}")
+(None, "{'alertId': 1231321321, 'l1dbId': 222222222, 'diaSource': {'diaSourceId': 281323062375219200, 'ccdVisitId': 111111, 'midPointTai': 1480360995, 'filterName': 'r', 'ra': 351.570546978, 'decl': 0.126243049656, 'ra_decl_Cov': {'raSigma': 0.00028, 'declSigma': 0.00028, 'ra_decl_Cov': 0.00029}, 'x': 112.1, 'y': 121.1, 'x_y_Cov': {'xSigma': 1.2, 'ySigma': 1.1, 'x_y_Cov': 1.2}, 'snr': 41.1, 'psFlux': 1241.0, 'flags': 0}, 'prv_diaSources': [{'diaSourceId': 281323062375219198, 'ccdVisitId': 111111, 'midPointTai': 1480360995, 'filterName': 'r', 'ra': 351.570546978, 'decl': 0.126243049656, 'ra_decl_Cov': {'raSigma': 0.00028, 'declSigma': 0.00028, 'ra_decl_Cov': 0.00029}, 'x': 112.1, 'y': 121.1, 'x_y_Cov': {'xSigma': 1.2, 'ySigma': 1.1, 'x_y_Cov': 1.2}, 'snr': 41.1, 'psFlux': 1241.0, 'flags': 0}, {'diaSourceId': 281323062375219199, 'ccdVisitId': 111111, 'midPointTai': 1480360995, 'filterName': 'r', 'ra': 351.570546978, 'decl': 0.126243049656, 'ra_decl_Cov': {'raSigma': 0.00028, 'declSigma': 0.00028, 'ra_decl_Cov': 0.00029}, 'x': 112.1, 'y': 121.1, 'x_y_Cov': {'xSigma': 1.2, 'ySigma': 1.1, 'x_y_Cov': 1.2}, 'snr': 41.1, 'psFlux': 1241.0, 'flags': 0}], 'diaObject': {'diaObjectId': 281323062375219201, 'ra': 351.570546978, 'decl': 0.126243049656, 'ra_decl_Cov': {'raSigma': 0.00028, 'declSigma': 0.00028, 'ra_decl_Cov': 0.00029}, 'radecTai': 1480360995, 'pmRa': 0.00013, 'pmDecl': 0.00014, 'parallax': 2.124124, 'pm_parallax_Cov': {'pmRaSigma': 0.00013, 'pmDeclSigma': 0.00013, 'parallaxSigma': 0.00013, 'pmRa_pmDecl_Cov': 0.00013, 'pmRa_parallax_Cov': 0.00013, 'pmDecl_parallax_Cov': 0.00013}, 'pmParallaxLnL': 0.00013, 'pmParallaxChi2': 0.00013, 'pmParallaxNdata': 1214, 'flags': 0}, 'ssObject': {'ssObjectId': 5364546, 'oe': {'q': 6654.14, 'e': 636.121, 'i': 5436.2344, 'lan': 54325.34, 'aop': 344243.3, 'M': 131.1241, 'epoch': 134141}, 'arc': 2.124124, 'orbFitLnL': 1343141.0341, 'orbFitChi2': 1341421.2414, 'orbFitNdata': 1214, 'MOID1': 3141.0, 'MOID2': 23432.423, 'moidLon1': 2143.213, 'moidLon2': 3142.23123, 'uH': 13231.231, 'uHErr': 13213.213, 'uG1': 32131.312, 'uG1Err': 31232.2132, 'uG2': 231.2313, 'uG2Err': 23132.231, 'flags': 0}, 'diaObjectL2': {'diaObjectId': 281323062375219201, 'ra': 351.570546978, 'decl': 0.126243049656, 'ra_decl_Cov': {'raSigma': 0.00028, 'declSigma': 0.00028, 'ra_decl_Cov': 0.00029}, 'radecTai': 1480360995, 'pmRa': 0.00013, 'pmDecl': 0.00014, 'parallax': 2.124124, 'pm_parallax_Cov': {'pmRaSigma': 0.00013, 'pmDeclSigma': 0.00013, 'parallaxSigma': 0.00013, 'pmRa_pmDecl_Cov': 0.00013, 'pmRa_parallax_Cov': 0.00013, 'pmDecl_parallax_Cov': 0.00013}, 'pmParallaxLnL': 0.00013, 'pmParallaxChi2': 0.00013, 'pmParallaxNdata': 1214, 'flags': 0}, 'diaSourcesL2': [{'diaSourceId': 281323062375219198, 'ccdVisitId': 111111, 'midPointTai': 1480360995, 'filterName': 'r', 'ra': 351.570546978, 'decl': 0.126243049656, 'ra_decl_Cov': {'raSigma': 0.00028, 'declSigma': 0.00028, 'ra_decl_Cov': 0.00029}, 'x': 112.1, 'y': 121.1, 'x_y_Cov': {'xSigma': 1.2, 'ySigma': 1.1, 'x_y_Cov': 1.2}, 'snr': 41.1, 'psFlux': 1241.0, 'flags': 0}, {'diaSourceId': 281323062375219199, 'ccdVisitId': 111111, 'midPointTai': 1480360995, 'filterName': 'r', 'ra': 351.570546978, 'decl': 0.126243049656, 'ra_decl_Cov': {'raSigma': 0.00028, 'declSigma': 0.00028, 'ra_decl_Cov': 0.00029}, 'x': 112.1, 'y': 121.1, 'x_y_Cov': {'xSigma': 1.2, 'ySigma': 1.1, 'x_y_Cov': 1.2}, 'snr': 41.1, 'psFlux': 1241.0, 'flags': 0}]}")
+...
+
+2018-06-06 21:19:51 WARN  VerifiableProperties:83 - Property auto.create.topics.enable is not valid
+2018-06-06 21:19:51 ERROR PythonRunner:91 - Python worker exited unexpectedly (crashed)
+org.apache.spark.api.python.PythonException: Traceback (most recent call last):
+  File "/usr/local/lib/python3.6/site-packages/pyspark/python/lib/pyspark.zip/pyspark/worker.py", line 214, in main
+    eval_type = read_int(infile)
+  File "/usr/local/lib/python3.6/site-packages/pyspark/python/lib/pyspark.zip/pyspark/serializers.py", line 685, in read_int
+    raise EOFError
+EOFError
+
+	at org.apache.spark.api.python.BasePythonRunner$ReaderIterator.handlePythonException(PythonRunner.scala:298)
+	at org.apache.spark.api.python.PythonRunner$$anon$1.read(PythonRunner.scala:438)
+	at org.apache.spark.api.python.PythonRunner$$anon$1.read(PythonRunner.scala:421)
+	at org.apache.spark.api.python.BasePythonRunner$ReaderIterator.hasNext(PythonRunner.scala:252)
+	at org.apache.spark.InterruptibleIterator.hasNext(InterruptibleIterator.scala:37)
+	at scala.collection.Iterator$GroupedIterator.fill(Iterator.scala:1126)
+	at scala.collection.Iterator$GroupedIterator.hasNext(Iterator.scala:1132)
+	at scala.collection.Iterator$$anon$11.hasNext(Iterator.scala:408)
+	at org.apache.spark.shuffle.sort.BypassMergeSortShuffleWriter.write(BypassMergeSortShuffleWriter.java:125)
+	at org.apache.spark.scheduler.ShuffleMapTask.runTask(ShuffleMapTask.scala:96)
+	at org.apache.spark.scheduler.ShuffleMapTask.runTask(ShuffleMapTask.scala:53)
+	at org.apache.spark.scheduler.Task.run(Task.scala:109)
+	at org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:345)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+	at java.lang.Thread.run(Thread.java:748)
+Caused by: org.apache.spark.api.python.PythonException: Traceback (most recent call last):
+  File "/usr/local/lib/python3.6/site-packages/pyspark/python/lib/pyspark.zip/pyspark/worker.py", line 229, in main
+    process()
+  File "/usr/local/lib/python3.6/site-packages/pyspark/python/lib/pyspark.zip/pyspark/worker.py", line 224, in process
+    serializer.dump_stream(func(split_index, iterator), outfile)
+  File "/usr/local/lib/python3.6/site-packages/pyspark/python/lib/pyspark.zip/pyspark/serializers.py", line 372, in dump_stream
+    vs = list(itertools.islice(iterator, batch))
+  File "/usr/local/lib/python3.6/site-packages/pyspark/streaming/kafka.py", line 130, in funcWithoutMessageHandler
+    return (keyDecoder(k_v[0]), valueDecoder(k_v[1]))
+  File "/usr/local/lib/python3.6/site-packages/pyspark/python/lib/pyspark.zip/pyspark/streaming/kafka.py", line 38, in utf8_decoder
+    return s.decode('utf-8')
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0xd2 in position 0: invalid continuation byte
+
+	at org.apache.spark.api.python.BasePythonRunner$ReaderIterator.handlePythonException(PythonRunner.scala:298)
+	at org.apache.spark.api.python.PythonRunner$$anon$1.read(PythonRunner.scala:438)
+	at org.apache.spark.api.python.PythonRunner$$anon$1.read(PythonRunner.scala:421)
+	at org.apache.spark.api.python.BasePythonRunner$ReaderIterator.hasNext(PythonRunner.scala:252)
+	at org.apache.spark.InterruptibleIterator.hasNext(InterruptibleIterator.scala:37)
+	at scala.collection.Iterator$class.foreach(Iterator.scala:893)
+	at org.apache.spark.InterruptibleIterator.foreach(InterruptibleIterator.scala:28)
+	at org.apache.spark.api.python.PythonRDD$.writeIteratorToStream(PythonRDD.scala:204)
+	at org.apache.spark.api.python.PythonRunner$$anon$2.writeIteratorToStream(PythonRunner.scala:407)
+	at org.apache.spark.api.python.BasePythonRunner$WriterThread$$anonfun$run$1.apply(PythonRunner.scala:215)
+	at org.apache.spark.util.Utils$.logUncaughtExceptions(Utils.scala:1988)
+	at org.apache.spark.api.python.BasePythonRunner$WriterThread.run(PythonRunner.scala:170)
+2018-06-06 21:19:51 ERROR PythonRunner:91 - This may have been caused by a prior exception:
+org.apache.spark.api.python.PythonException: Traceback (most recent call last):
+  File "/usr/local/lib/python3.6/site-packages/pyspark/python/lib/pyspark.zip/pyspark/worker.py", line 229, in main
+    process()
+  File "/usr/local/lib/python3.6/site-packages/pyspark/python/lib/pyspark.zip/pyspark/worker.py", line 224, in process
+    serializer.dump_stream(func(split_index, iterator), outfile)
+  File "/usr/local/lib/python3.6/site-packages/pyspark/python/lib/pyspark.zip/pyspark/serializers.py", line 372, in dump_stream
+    vs = list(itertools.islice(iterator, batch))
+  File "/usr/local/lib/python3.6/site-packages/pyspark/streaming/kafka.py", line 130, in funcWithoutMessageHandler
+    return (keyDecoder(k_v[0]), valueDecoder(k_v[1]))
+  File "/usr/local/lib/python3.6/site-packages/pyspark/python/lib/pyspark.zip/pyspark/streaming/kafka.py", line 38, in utf8_decoder
+    return s.decode('utf-8')
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0xd2 in position 0: invalid continuation byte
+
+
+
+....
+
+
+
+
+Docker Swarm
+
+To stop a service running in Docker Swarm
+ 
+   docker service remove kafka1
+
+   docker service list
+	ID                  NAME                MODE                REPLICAS            IMAGE                             PORTS
+	sbdb3t0rwb6n        consumer1           replicated          1/1                 alert_stream:latest               
+	nmoh56s4kqf5        producer1           replicated          1/1                 alert_stream:latest               
+	q191p5ccdt5j        zookeeper           replicated          1/1                 confluentinc/cp-zookeeper:3.2.0   *:30000->32181/tcp
+
+   docker service remove consumer1 
+   docker service remove producer1 
+   docker service remove zookeeper  

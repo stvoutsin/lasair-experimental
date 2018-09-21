@@ -1,0 +1,78 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2018, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+
+#########################
+## Restarting Service ###
+#########################
+
+ps aux | grep "config"
+  ...  /opt/anaconda/bin/python /opt/anaconda/bin/jupyterhub --config /etc/jupyterhub/jupyterhub_config.py
+
+kill # job..
+
+
+systemctl restart jupyterhub
+
+
+
+#########################
+## Enablign Widgets   ###
+#########################
+
+jupyter labextension install --py jupyterlab_widgets
+jupyter nbextension enable --py widgetsnbextension --sys-prefix
+
+
+# IPywidgets version 7.2.1 required for iPyAladin
+conda install -c conda-forge ipywidgets=7.2.1
+jupyter nbextension enable ipyaladin --py --sys-prefix
+
+
+
+
+################################
+## Load LSST Python Kernel   ###
+################################
+
+source /opt/lsst-3.6/loadLSST.bash
+
+
+
+################################
+## Adding a JupyterHub User  ###
+################################
+
+user=user
+pass=pass
+adduser ${user}
+passwd ${user} ${pass}
+mkdir ${HOME}/${user}
+nano /etc/jupyterhub/jupyterhub_config.py 
+
+  ...
+
+     c.Authenticator.whitelist = {'user', .. }
+
+  ...
+
+
