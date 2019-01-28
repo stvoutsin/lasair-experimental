@@ -1,0 +1,222 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2015, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+wget https://raw.githubusercontent.com/openshiftninja/mesos-marathon/master/docker-compose.yaml
+
+docker-compose up
+
+[Stevedore@Astoalith ~]$ cat docker-compose.yaml 
+# set an environmental variable called HOST_IP that
+# has the host's IP address
+version: '2'
+services:
+  zookeeper:
+    image: zookeeper
+    hostname: zookeeper
+    ports:
+      - 2181:2181
+      - 2888:2888
+      - 3888:3888
+    networks:
+      app_net:
+        ipv4_address: 172.16.121.2
+
+  mesos-master:
+    image: mesosphere/mesos-master:1.4.1
+    privileged: true
+    hostname: localhost
+    networks:
+      app_net:
+        ipv4_address: 172.16.121.3
+    depends_on:
+      - zookeeper
+    links:
+      - zookeeper
+    ports:
+      - 5050:5050
+    environment:
+      - MESOS_ZK=zk://zookeeper:2181/mesos
+      - MESOS_QUORUM=1
+      - MESOS_CLUSTER=docker-compose
+      - MESOS_REGISTRY=in_memory
+      - MESOS_HOSTNAME=localhost
+      - MESOS_WORK_DIR=/var/tmp/mesos
+      - MESOS_LOG_DIR=/var/log/mesos
+      - LIBPROCESS_IP=172.16.121.3
+
+  mesos-slave:
+    image: mesosphere/mesos-slave:1.4.1
+    privileged: true
+    hostname: localhost
+    ports:
+      - 5051:5051
+    networks:
+      app_net:
+        ipv4_address: 172.16.121.4
+    links:
+      - zookeeper:zookeeper
+      - mesos-master:master.mesos
+    depends_on:
+      - zookeeper
+      - mesos-master
+    environment:
+      - MESOS_MASTER=zk://zookeeper:2181/mesos
+      - MESOS_CONTAINERIZERS=docker
+      - MESOS_PORT=5051
+      - MESOS_RESOURCES=ports(*):[11000-11999]
+      - MESOS_HOSTNAME=localhost
+      - MESOS_WORK_DIR=/var/tmp/mesos
+      - MESOS_LOG_DIR=/var/log/mesos
+      - MESOS_SYSTEMD_ENABLE_SUPPORT=false
+      - LIBPROCESS_IP=172.16.121.4
+      # - MESOS_LAUNCHER=posix
+      # - MESOS_LOGGING_LEVEL=INFO
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  marathon:
+    image: mesosphere/marathon
+    entrypoint:
+      - ./bin/start
+      - --disable_ha
+    hostname: localhost
+    ports:
+      - 8080:8080
+    networks:
+      app_net:
+        ipv4_address: 172.16.121.5
+    links:
+      - zookeeper
+      - mesos-master
+    depends_on:
+      - zookeeper
+      - mesos-master
+      - mesos-slave
+    environment:
+      - MARATHON_ZK=zk://zookeeper:2181/marathon
+      - MARATHON_MASTER=zk://zookeeper:2181/mesos
+      - LIBPROCESS_IP=172.16.121.5
+
+networks:
+  app_net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        -
+          subnet: 172.16.121.0/24
+[Stevedore@Astoalith ~]$ ^C
+[Stevedore@Astoalith ~]$ ^C
+[Stevedore@Astoalith ~]$ ls
+docker-compose.yaml  spark
+[Stevedore@Astoalith ~]$ cd spark/
+[Stevedore@Astoalith spark]$ ls
+Dockerfile  entrypoint.sh  scripts  spark-conf
+[Stevedore@Astoalith spark]$ cat Dockerfile 
+# Version 0.1
+FROM ipython/scipystack
+MAINTAINER Bernardo Gomez Palacio "bernardo.gomezpalacio@gmail.com"
+ENV REFRESHEDAT 2015-03-19
+
+ENV DEBIANFRONTEND noninteractive
+
+RUN apt-get update
+RUN apt-get dist-upgrade -y
+
+# Setup
+RUN sudo apt-key adv --keyserver keyserver.ubuntu.com --recv E56151BF
+RUN export OSDISTRO=$(lsb_release -is | tr '[:upper:]' '[:lower:]') && export OSCODENAME=$(lsb_release -cs) && echo "deb http://repos.mesosphere.io/${OSDISTRO} ${OSCODENAME} main" | tee /etc/apt/sources.list.d/mesosphere.list && apt-get -y update
+
+RUN apt-get -y install mesos
+
+RUN apt-get install -y python libnss3 curl
+
+RUN curl http://d3kbcqa49mib13.cloudfront.net/spark-1.6.0-bin-hadoop2.6.tgz | tar -xzC /opt && mv /opt/spark* /opt/spark
+
+RUN apt-get clean
+
+# Fix pypspark six error.
+RUN pip3 install -U six
+RUN pip3 install msgpack-python
+RUN pip3 install avro
+RUN pip2 install -U six
+RUN pip2 install msgpack-python
+RUN pip2 install avro
+COPY spark-conf/* /opt/spark/conf/
+COPY scripts /scripts
+
+ENV SPARKHOME /opt/spark
+
+ENTRYPOINT ["sh", "/scripts/run.sh"]
+[Stevedore@Astoalith spark]$ ls
+Dockerfile  entrypoint.sh  scripts  spark-conf
+[Stevedore@Astoalith spark]$ rm entrypoint.sh 
+[Stevedore@Astoalith spark]$ cat scripts/run.sh 
+#!/bin/bash
+
+SPARKMASTER=${SPARKMASTER:-local}
+MESOSEXECUTORCORE=${MESOSEXECUTORCORE:-0.1}
+SPARKIMAGE=${SPARKIMAGE:-sparkmesos:lastet}
+CURRENTIP=$(hostname -i)
+
+sed -i 's;SPARKMASTER;'$SPARKMASTER';g' /opt/spark/conf/spark-defaults.conf
+sed -i 's;MESOSEXECUTORCORE;'$MESOSEXECUTORCORE';g' /opt/spark/conf/spark-defaults.conf
+sed -i 's;SPARKIMAGE;'$SPARKIMAGE';g' /opt/spark/conf/spark-defaults.conf
+sed -i 's;CURRENTIP;'$CURRENTIP';g' /opt/spark/conf/spark-defaults.conf
+
+export SPARKLOCALIP=${SPARKLOCALIP:-${CURRENTIP:-"127.0.0.1"}}
+export SPARKPUBLICDNS=${SPARKPUBLICDNS:-${CURRENTIP:-"127.0.0.1"}}
+
+
+if [ $ADDITIONALVOLUMES ];
+then
+echo "spark.mesos.executor.docker.volumes: $ADDITIONALVOLUMES" >> /opt/spark/conf/spark-defaults.conf
+fi
+
+exec "$@"
+[Stevedore@Astoalith spark]$ cat spark-conf/spark-
+spark-defaults.conf  spark-env.sh         
+[Stevedore@Astoalith spark]$ cat spark-conf/spark-env.sh 
+export MESOSNATIVEJAVALIBRARY=${MESOSNATIVEJAVALIBRARY:-/usr/lib/libmesos.so}
+export SPARKLOCALIP=${SPARKLOCALIP:-"127.0.0.1"}
+export SPARKPUBLICDNS=${SPARKPUBLICDNS:-"127.0.0.1"}
+[Stevedore@Astoalith spark]$ cat spark-conf/spark-
+spark-defaults.conf  spark-env.sh         
+[Stevedore@Astoalith spark]$ cat spark-conf/spark-defaults.conf 
+spark.master  SPARKMASTER
+spark.mesos.mesosExecutor.cores   MESOSEXECUTORCORE
+spark.mesos.executor.docker.image SPARKIMAGE
+spark.mesos.executor.home /opt/spark
+spark.driver.host CURRENTIP
+spark.executor.extraClassPath /opt/spark/custom/lib/*
+spark.driver.extraClassPath   /opt/spark/custom/lib/*
+
+
+
+[Stevedore@Astoalith spark]$ 
+
+
+docker build -t sparkmesos . && docker tag sparkmesos:latest sparkmesos:latest
+
+
+ docker run -it --network="stevedore_app_net" --rm -e SPARKMASTER="mesos://zk://zookeeper:2181/mesos" -e SPARKIMAGE="sparkmesos:latest" -e PYSPARKDRIVERPYTHON=ipython2 sparkmesos:latest /opt/spark/bin/pyspark
+

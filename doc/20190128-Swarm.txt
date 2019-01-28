@@ -1,0 +1,64 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2015, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+# Creating a Docker Swarm
+
+
+## Create Master VM 
+
+createvm Gworewia (master)
+..
+Domain Gworewia started
+
+ssh Stevedore@Gworewia
+
+    ## Initialize Swarm with VM's address
+
+    docker swarm init --advertise-addr 192.168.201.15
+
+        ....
+	Swarm initialized: current node (tkhj2d3z40x51vodr1a2b4n2h) is now a manager.
+
+	To add a worker to this swarm, run the following command:
+
+	    docker swarm join --token SWMTKN-1-66w8t157ufren0nv8kvdvh912va3y7wpzw6t7nbiz5xjt5vxbe-cvc3tg9bktu1likj06btd69x6 192.168.201.15:2377
+
+	To add a manager to this swarm, run 'docker swarm join-token manager' and follow the instructions.
+        ....
+    
+    ## Fix Firewall issue
+    sudo su
+    firewall-cmd --add-port=2377/tcp --permanent
+    firewall-cmd --reload
+
+
+## Create Worker VM 
+createvm Astoalith (worker)
+Domain Astoalith started
+
+ssh Stevedore@Astoalith
+
+    docker swarm join --token SWMTKN-1-66w8t157ufren0nv8kvdvh912va3y7wpzw6t7nbiz5xjt5vxbe-cvc3tg9bktu1likj06btd69x6 192.168.201.15:2377
+      ...
+      This node joined a swarm as a worker.
+      ...
+

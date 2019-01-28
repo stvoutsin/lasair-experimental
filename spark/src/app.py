@@ -8,9 +8,8 @@ import time
 import math
 from operator import add
 import logging
-sys.path.append('/app/second_htm')
-#sys.path.append('/app/htmCircleApp')
-
+sys.path.append('/app/htm')
+import settings
 import htmCircle
 
 
@@ -18,18 +17,18 @@ conf = SparkConf()
 conf.setMaster('spark://spark-master:7077')
 conf.setAppName('spark-basic')
 sc = SparkContext(conf=conf)
-sc.addPyFile("/app/second_htm/htmCircle.py") 
-sc.addPyFile("/app/second_htm/_htmCircle.so") 
+sc.addPyFile("/app/htm/htmCircle.py") 
+sc.addPyFile("/app/htm/_htmCircle.so") 
 
 point = [336.14, 0.13]
 
 properties = {
-    'user'    : '',       
-    'password': '',
-    'host'    : '',
-    'database': '',
+    'user'    : settings.DB_USER,
+    'password': settings.DB_PASS,
+    'host'    : 'jdbc:mysql://' + settings.DB_HOST +':3306',
+    'database': settings.DB_NAME,
     'driver': 'com.mysql.jdbc.Driver',
-    'url' : ''
+    'url' : 'jdbc:mysql://' + settings.DB_HOST +':3306/' + settings.DB_NAME
 }
 
 working_directory = '/app/'
