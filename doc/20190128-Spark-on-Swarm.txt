@@ -69,6 +69,9 @@ ssh Stevedore@Astoalith
       This node joined a swarm as a worker.
       ...
 
+      ## Fetch Spark Project source code (Need to do this on every Swarm node)
+      git clone https://github.com/stvoutsin/lasair-experimental
+
 ## ------------------------------------------------- ##
 
 ## Connect to Master VM
