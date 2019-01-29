@@ -122,3 +122,12 @@ ssh -L '*:8084:Gworewia:8080' Stevedore@Gworewia
 	Alive Workers: 2
 	Cores in use: 8 Total, 0 Used
 ...
+
+
+## Scaling Workers
+# We can also scale up the number of Spark workers as follows:
+  docker service scale spark_spark-worker=4
+
+# These correctly show up in Spark UI as Spark worker nodes, and are distributed using Swarm on the Worker VMs
+# So perhaps better to do this than define multiple workers in docker compose
+ 
