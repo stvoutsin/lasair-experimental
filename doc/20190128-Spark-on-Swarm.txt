@@ -47,13 +47,22 @@ ssh Stevedore@Gworewia
 
 	To add a manager to this swarm, run 'docker swarm join-token manager' and follow the instructions.
         ....
-    
+
+    ## Create Spark-net network
+    docker network create --driver overlay spark-net
+
     ## Fix Firewall issue
     sudo su
     firewall-cmd --add-port=2377/tcp --permanent
+    firewall-cmd --add-port=2377/tcp --permanent
+    firewall-cmd --add-port=7946/tcp --permanent
+    firewall-cmd --add-port=4789/tcp --permanent
+    firewall-cmd --add-port=4789/udp --permanent
+    iptables -A INPUT -p 50 -j ACCEPT    
     firewall-cmd --reload
+    exit
 
-
+exit
 
 ## ------------------------------------------------- ##
 
@@ -72,6 +81,18 @@ ssh Stevedore@Astoalith
       ## Fetch Spark Project source code (Need to do this on every Swarm node)
       git clone https://github.com/stvoutsin/lasair-experimental
 
+    
+     ## Fix Firewall issue
+     sudo su
+     firewall-cmd --add-port=2377/tcp --permanent
+     firewall-cmd --add-port=2377/tcp --permanent
+     firewall-cmd --add-port=7946/tcp --permanent
+     firewall-cmd --add-port=4789/udp --permanent
+     firewall-cmd --add-port=4789/tcp --permanent
+     iptables -A INPUT -p 50 -j ACCEPT    
+     firewall-cmd --reload
+     exit
+
 ## ------------------------------------------------- ##
 
 ## Connect to Master VM
@@ -83,6 +104,7 @@ pushd ${HOME}
     git clone https://github.com/stvoutsin/lasair-experimental
 
 popd
+
 
 
 ## Deploy Spark Stack
