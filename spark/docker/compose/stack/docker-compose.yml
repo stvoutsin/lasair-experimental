@@ -9,10 +9,13 @@ services:
         image:
             "bde2020/spark-master:2.4.0-hadoop2.7"
         environment:
-            - ENABLE_INIT_DAEMON=false
+            ENABLE_INIT_DAEMON: "false"
+            MASTER: spark://spark-master:7077
         ports:
+            - 4040:4040
             - 8080:8080
             - 7077:7077
+            - 6066:6066
         volumes:
             - ../../../src/:/app/
             - ../../../conf/spark-defaults.conf:/spark/conf/spark-defaults.conf
@@ -25,23 +28,15 @@ services:
         image:
             "bde2020/spark-worker:2.4.0-hadoop2.7"
         environment:
-            - ENABLE_INIT_DAEMON=false
+            ENABLE_INIT_DAEMON: "false"
+            SPARK_WORKER_CORES: 2
+            SPARK_WORKER_MEMORY: 1g
         volumes:
             - ../../../lib/mysql-connector-java-8.0.13.jar:/spark/jars/mysql-connector-java-8.0.13.jar
         depends_on:
             - spark-master
+        ports:
+            - 8081:8081
         networks:
             - spark-net
-
-    spark-worker-2:
-        image:
-            "bde2020/spark-worker:2.4.0-hadoop2.7"
-        environment:
-           - ENABLE_INIT_DAEMON=false
-        volumes:
-           - ../../../lib/mysql-connector-java-8.0.13.jar:/spark/jars/mysql-connector-java-8.0.13.jar
-        depends_on:
-            - spark-master
-        networks:
-            - spark-net
-
+ 
