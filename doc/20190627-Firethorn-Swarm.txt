@@ -1,0 +1,402 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2015, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+
+## ------------------------------------------------------------------------------------------
+## Create Master VM 
+## ------------------------------------------------------------------------------------------
+
+
+createvm Cadelicia (master)
+..
+Domain Cadelicia started
+
+ssh Stevedore@Cadelicia
+
+
+
+## ------------------------------------------------------------------------------------------
+## Initialize Swarm with VM's address
+## ------------------------------------------------------------------------------------------
+
+[Stevedore@Cadelicia ~]$ ifconfig
+
+       ..  192.168.201.11  ..
+
+
+docker swarm init --advertise-addr 192.168.201.11  
+
+
+		Swarm initialized: current node (5zrs2po0x1teeyzigf09mw5vi) is now a manager.
+
+		To add a worker to this swarm, run the following command:
+
+		    docker swarm join --token SWMTKN-1-04u77kiexc4jjh40ncaov4kxvez0pszz8gjoake56i9liplcfb-cnbjy5d7ul9qdd9r307rt9zbv 192.168.201.11:2377
+
+		To add a manager to this swarm, run 'docker swarm join-token manager' and follow the instructions.
+
+
+## ------------------------------------------------------------------------------------------
+## Create Spark-net network
+## ------------------------------------------------------------------------------------------
+## docker network create --driver overlay firethorn-net
+
+
+    ## Fix Firewall issue
+    sudo su
+	    firewall-cmd --add-port=2377/tcp --permanent
+	    firewall-cmd --add-port=2377/tcp --permanent
+	    firewall-cmd --add-port=7946/tcp --permanent
+	    firewall-cmd --add-port=4789/tcp --permanent
+	    firewall-cmd --add-port=4789/udp --permanent
+	    iptables -A INPUT -p 50 -j ACCEPT    
+	    firewall-cmd --reload
+    exit
+
+
+## -------------------------------------------------------------------------------------------
+## Add secret function.
+## -------------------------------------------------------------------------------------------
+
+    secrethost='stv@shepseskaf.roe.ac.uk'
+    secretfile='${HOME:?}/secret.store.20181212'
+
+    secret()
+    {
+        local key=${1:?}
+        ssh -o 'VisualHostKey=no' "${secrethost:?}" "sed -n 's/${key}=\\(.*\\)/\\1/p' \"${secretfile:?}\"" 
+    }
+
+    secret 'firethorn.ssh.keys' >> "${HOME}/.ssh/authorized_keys"
+
+
+
+## -------------------------------------------------------------------------------------------
+## Set the target branch and builtag
+## -------------------------------------------------------------------------------------------
+
+
+    export buildtag=2.1.33
+    export branch=default
+
+
+
+## -------------------------------------------------------------------------------------------
+## Create our chain.properties file
+## -------------------------------------------------------------------------------------------
+
+cat > "${HOME:?}/chain.properties" << EOF
+
+metadata=postgres
+metauser=$(pwgen 20 1)
+metapass=$(pwgen 20 1) 
+
+userhost=$(secret 'firethorn.user.host')
+userdata=$(secret 'firethorn.user.data')
+useruser=$(secret 'firethorn.user.user')
+userpass=$(secret 'firethorn.user.pass')
+usertype=mssql
+
+datahost=$(secret 'firethorn.data.host')
+datadata=$(secret 'firethorn.data.data')
+datacatalog=$(secret 'firethorn.data.catalog')
+datatype=$(secret 'firethorn.data.type')
+datauser=$(secret 'firethorn.data.user')
+datapass=$(secret 'firethorn.data.pass')
+
+tapschemadata=$(secret 'firethorn.tapschema.database.name')
+tapschemauser=$(secret 'firethorn.tapschema.database.user')
+tapschemapass=$(secret 'firethorn.tapschema.database.pass')
+tapschemahost=$(secret 'firethorn.tapschema.database.host')
+tapschemaport=$(secret 'firethorn.tapschema.database.port')
+tapschematype=$(secret 'firethorn.tapschema.database.type')
+tapschemajdbc=$(secret 'firethorn.tapschema.jdbc.name')
+
+tunneluser=$(secret 'ssh.tunnel.user')
+tunnelhost=$(secret 'ssh.tunnel.host')
+
+admingroup=$(pwgen 20 1)	
+adminuser=$(pwgen 20 1)
+adminpass=$(pwgen 20 1)
+
+adql_query_delay_first=$(secret 'adql.query.delay.first')
+ 
+firethorn_limits_rows_absolute=$(secret 'firethorn.limits.rows.absolute')
+firethorn_limits_rows_default=$(secret 'firethorn.limits.rows.default')
+
+guestgroup=friends
+endpoint=$(secret 'endpoint')
+
+EOF
+
+
+
+## -----------------------------------------------------
+## Create our Firethorn properties.
+## -----------------------------------------------------
+
+source "${HOME:?}/chain.properties"
+cat > "${HOME:?}/firethorn.properties" << EOF
+
+firethorn.meta.type=pgsql
+firethorn.meta.driver=org.postgresql.Driver
+firethorn.meta.host=bethany
+firethorn.meta.url=jdbc:postgresql://bethany/${metadata}
+firethorn.meta.data=postgres
+firethorn.meta.user=${metauser:?}
+firethorn.meta.pass=${metapass:?}
+
+firethorn.user.type=mssql
+firethorn.user.url=jdbc:jtds:sqlserver://${userhost:?}/${userdata:?}
+firethorn.user.driver=net.sourceforge.jtds.jdbc.Driver
+firethorn.user.host=${userhost:?}
+firethorn.user.data=${userdata:?}
+firethorn.user.user=${useruser:?}
+firethorn.user.pass=${userpass:?}
+
+firethorn.tapschema.resource.name=${tapschemajdbc}
+firethorn.tapschema.database.name=${tapschemadata}
+firethorn.tapschema.database.host=${tapschemahost}
+firethorn.tapschema.database.port=${tapschemaport}
+firethorn.tapschema.database.user=${tapschemauser}
+firethorn.tapschema.database.pass=${tapschemapass}
+
+firethorn.admin.community=${admingroup:?}
+firethorn.admin.user.name=${adminuser:?}
+firethorn.admin.user.pass=${adminpass:?}
+
+firethorn.guest.community=${guestgroup:?}
+
+adql.query.delay.first=${adql_query_delay_first:?}
+
+firethorn.limits.rows.absolute=${firethorn_limits_rows_absolute:?}
+firethorn.limits.rows.default=${firethorn_limits_rows_default:?}
+	
+
+EOF
+
+
+
+## -------------------------------------------------------------------------------------------
+## Create our compose env files.
+## -------------------------------------------------------------------------------------------
+
+source "${HOME:?}/chain.properties"
+cat > "${HOME:?}/.env" << EOF
+
+buildtag=${branch:?}
+endpoint=${endpoint:?}
+
+
+metadata=postgres
+metauser=${metauser:?}
+metapass=${metapass:?}
+firethorn.meta.type=pgsql
+firethorn.meta.driver=org.postgresql.Driver
+firethorn.meta.host=bethany
+firethorn.meta.url=jdbc:postgresql://bethany/postgres
+firethorn.meta.data=postgres
+firethorn.meta.user=${metauser:?}
+firethorn.meta.pass=${metapass:?}
+
+
+datadata=${datadata:?}
+datauser=${datauser:?}
+datapass=${datapass:?}
+datahost=${datahost:?}
+datacatalog=${datacatalog:?}
+datatype=mssql
+
+
+tapschemadata=${tapschemadata:?}
+tapschemauser=${tapschemauser:?}
+tapschemapass=${tapschemapass:?}
+tapschemahost=${tapschemahost}
+tapschemaport=${tapschemaport:?}
+tapschemajdbc=${tapschemajdbc:?}
+tapschematype=${tapschematype:?}
+firethorn.tapschema.resource.name=${tapschemajdbc:?}
+firethorn.tapschema.database.name=${tapschemadata:?}
+firethorn.tapschema.database.host=${tapschemahost:?}
+firethorn.tapschema.database.port=5432
+firethorn.tapschema.database.user=${tapschemauser:?}
+firethorn.tapschema.database.pass=${tapschemapass:?}
+firethorn.tapschema.database.type=pgsql
+
+userhost=${userhost:?}
+userdata=${userdata:?}
+useruser=${useruser:?}
+userpass=${userpass:?}
+usertype=mssql
+firethorn.user.type=mssql
+firethorn.user.url=jdbc:jtds:sqlserver://${userhost:?}/${userdata:?}
+firethorn.user.driver=net.sourceforge.jtds.jdbc.Driver
+firethorn.user.host=${userhost:?}
+firethorn.user.data=${userdata:?}
+firethorn.user.user=${useruser:?}
+firethorn.user.pass=${userpass:?}
+
+
+admingroup=${admingroup:?}
+adminuser=${adminuser:?}
+adminpass=${adminpass:?}
+guestgroup=${guestgroup:?}
+firethorn.admin.community=${admingroup:?}
+firethorn.admin.user.name=${adminuser:?}
+firethorn.admin.user.pass=${adminpass:?}
+firethorn.guest.community=${guestgroup:?}
+
+
+adql_query_delay_first=${adql_query_delay_first:?}
+adql.query.delay.first=${adql_query_delay_first:?}
+firethorn_limits_rows_absolute=${firethorn_limits_rows_absolute:?}
+firethorn_limits_rows_default=${firethorn_limits_rows_default:?}
+firethorn.limits.rows.absolute=${firethorn_limits_rows_absolute:?}
+firethorn.limits.rows.default=${firethorn_limits_rows_default:?}
+
+firethorn.ogsadai.endpoint=http://jarmila:8080/ogsadai/services
+
+
+EOF
+
+
+source "${HOME:?}/chain.properties"
+cat > "${HOME:?}/.tapschema_env" << EOF
+
+POSTGRES_DB=${tapschemadatabase}
+POSTGRES_USER=${tapschemauser}
+POSTGRES_PASSWORD=${tapschemapass}
+
+EOF
+
+
+source "${HOME:?}/chain.properties"
+cat > "${HOME:?}/.metadata_env" << EOF
+
+POSTGRES_DB=${metadata}
+POSTGRES_USER=${metauser}
+POSTGRES_PASSWORD=${metapass}
+         
+EOF
+
+
+## -------------------------------------------------------------------------------------------
+## Fetch the TAP Deployer
+## -------------------------------------------------------------------------------------------
+
+wget https://raw.githubusercontent.com/stvoutsin/firethorn.py/master/docker/firethorn-compose-v3.yml -O  docker-compose.yml
+
+
+
+## ------------------------------------------------------------------------
+## Deploy Swarm stack
+## ------------------------------------------------------------------------
+
+docker stack deploy -c docker-compose.yml ft
+
+
+
+## ------------------------------------------------------------------------
+## To remove all docker services 
+## ------------------------------------------------------------------------
+
+## docker service rm $(docker service ls -q)
+
+
+
+## ------------------------------------------------------------------------
+## To remove stack of services
+## ------------------------------------------------------------------------
+
+## docker stack rm ft
+
+
+
+## ------------------------------------------------------------------------
+## Run Docker Compose tap-deployer.yml from firethorn.py
+## ------------------------------------------------------------------------
+
+
+source "${HOME:?}/chain.properties"
+
+docker-compose --file "docker-compose.yml" run firethorn-py
+
+import firethorn
+import firethorn_utils.configurator as configur
+ft = firethorn.Firethorn(endpoint="http://gillian:8080/firethorn")
+ft.login(firethorn.config.adminuser, firethorn.config.adminpass, firethorn.config.admingroup)
+configurator =  configur.Configurator(ft)
+configurator.load_resources("/home/firethorn.py/firethorn/data/osa-tap.json")
+
+..
+Importing JDBC Schema: ATLASDR1
+Importing JDBC Schema: ATLASDR2
+Importing JDBC Schema: ATLASDR3
+Importing JDBC Schema: 2MASS
+Importing JDBC Schema: 2XMM
+Importing JDBC Schema: WISE
+Importing JDBC Schema: VIKINGDR3
+Importing JDBC Schema: VHSDR1
+Importing JDBC Schema: MGC
+Importing JDBC Schema: GLIMPSE
+Importing JDBC Schema: FIRST
+Importing JDBC Schema: DENIS
+TAP Service available at: http://gillian:8080/firethorn/tap/54/
+
+..
+
+## ------------------------------------------------------------------------
+## [OPTIONAL] Adding a seconf VM to the Swarm
+## ------------------------------------------------------------------------
+
+
+## Create Worker VM 
+createvm Erennon (worker)
+Domain Erennon started
+
+ssh Stevedore@Erennon
+
+     docker swarm join --token SWMTKN-1-04u77kiexc4jjh40ncaov4kxvez0pszz8gjoake56i9liplcfb-cnbjy5d7ul9qdd9r307rt9zbv 192.168.201.11:2377
+      ...
+      This node joined a swarm as a worker.
+      ...
+
+    
+     ## Fix Firewall issue
+     sudo su
+     firewall-cmd --add-port=2377/tcp --permanent
+     firewall-cmd --add-port=2377/tcp --permanent
+     firewall-cmd --add-port=7946/tcp --permanent
+     firewall-cmd --add-port=4789/udp --permanent
+     firewall-cmd --add-port=4789/tcp --permanent
+     iptables -A INPUT -p 50 -j ACCEPT    
+     firewall-cmd --reload
+     exit
+
+
+## ------------------------------------------------------------------------
+##  Scaling: If we were to scale the cluster, we Could do so as:
+## ------------------------------------------------------------------------
+docker service scale ft_gillian=4
+docker service scale ft_jarmila=4
+
+## But this will not do anything at the moment
