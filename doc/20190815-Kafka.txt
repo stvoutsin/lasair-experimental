@@ -1,0 +1,113 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2018, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+
+
+## Get  Alert Stream code & sample-avro-alert
+
+sudo git clone https://github.com/lsst-dm/alert_stream.git
+sudo git clone https://github.com/lsst-dm/sample-avro-alert.git
+
+
+
+## Get Local host IP
+
+ifconfig
+
+..
+
+  192.168.42.48
+
+..
+
+
+## Setup docker-compose
+
+nano docker-compose.yml
+
+
+version: '3.2'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:3.2.0
+    environment:
+      - ZOOKEEPER_CLIENT_PORT=32181
+      - ZOOKEEPER_TICK_TIME=2000
+    ports:
+        - "32181:32181"
+
+  kafka:
+    image: confluentinc/cp-kafka:3.2.0
+    depends_on:
+      - zookeeper
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:32181
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://192.168.42.48:9092
+    ports:
+      - "9092:9092"
+
+  kafka2:
+    image: confluentinc/cp-kafka:3.2.0
+    depends_on:
+      - zookeeper
+    environment:
+      - KAFKA_BROKER_ID=2
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:32181
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://192.168.42.48:9093
+    ports:
+      - "9093:9093"
+
+  kafka3:
+    image: confluentinc/cp-kafka:3.2.0
+    depends_on:
+      - zookeeper
+    environment:
+      - KAFKA_BROKER_ID=3
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:32181
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://192.168.42.48:9094
+    ports:
+      - "9094:9094"
+
+
+
+## Run Monitor Container
+
+docker run -it --rm \
+  --network=alertstreamztf_default \
+  alert_stream python bin/printStream.py 192.168.42.48:9092 my-stream 1
+
+
+
+## Run Filter Container
+
+docker run -it --rm \
+  --network=alertstreamztf_default \
+  alert_stream python bin/filterStream.py 192.168.42.48:9092 my-stream 1
+
+
+
+## From Local Host, run sendAlertStream.py, pointed to local IP
+
+stelios@stelios-pc:~/projects/lasair/lasair/src/alert_stream_ztf$ python3 bin/sendAlertStream.py 192.168.42.48:9092 my-stream
+

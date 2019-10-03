@@ -1,0 +1,130 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2015, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+
+  902  git clone https://github.com/lsst-dm/alert_stream
+  903  ls
+  904  cd a
+  905  cd alert_stream/
+  906  ls
+  907  cat Dockerfile 
+  908  ls
+  909   pip install 'confluent-kafka>=0.11.4'
+  910  apt-get
+  911  yum
+  912  yum install pip
+  913  ls
+  914  cat Dockerfile 
+  915  pip install 'confluent-kafka>=0.11.4'
+  916  yum install pip
+  917  yum -y install python-pip
+  918  yum -y install python3-pip
+  919  yum -y install python-pip3
+  920  pip install 'confluent-kafka>=0.11.4'
+  921  cat Dockerfile 
+  922  pip install avro-python3
+  923   pip install Cython
+  924  pip install fastavro==0.21.23
+  925  pip install numpy
+  926  python3
+  927  pip3
+  928  pip3 install 'confluent-kafka>=0.11.4'
+  929  cat Dockerfile 
+  930  pip3 install avro-python3
+  931  pip3 install Cython
+  932  pip3 install fastavro==0.21.23
+  933  pip3 install numpy
+  934  pip3.5 install numpy
+  935  pip install --upgrade pip
+  936  pip3 install numpy
+  937  python3.5
+  938  python3.6
+  939  python3.7
+  940  yum install gcc
+  941  cd /usr/src/
+  942  ls
+  943  wget https://www.python.org/ftp/python/3.5.5/Python-3.5.5.tgz
+  944   
+  945  ls
+  946  tar xzf Python-3.5.5.tgz
+  947  cd Python-3.5.5
+  948  ls
+  949  ./configure --enable-optimizations
+  950  sudo yum install -y https://centos7.iuscommunity.org/ius-release.rpm
+  951  sudo yum update
+  952  sudo yum install -y python36u python36u-libs python36u-devel python36u-pip
+  953  python3.6 -V
+  954  python3.6 -m pip install pip
+  955  pip install --upgrade pip
+  956  python3.6 -m pip install
+  957  ls
+  958  cd ~
+  959  ls
+  960  l
+  961  cd /st
+  962  ls
+  963  cd /home/stv/
+  964  ls
+  965  cd a
+  966  cd alert_stream/
+  967  ls
+  968  cat Dockerfile 
+  969  python3.6 -V
+  970  python3.6 -m pip install 'confluent-kafka>=0.11.4'
+  971   python3.6 -m pip install avro-python3
+  972  python3.6 -m pip install Cython
+  973   python3.6 -m pip install  fastavro==0.21.23
+  974   python3.6 -m pip install numpy
+  975  cat Dockerfile 
+  976  ls
+  977  ls
+  978  cd ..
+  979  ls
+  980  git clone https://github.com/lsst-dm/sample-avro-alert.git
+  981  git clone https://github.com/lsst-dm/sample-avro-alert.git
+  982  ls
+  983  cd a
+  984  cd alert_stream/
+  985  ls
+  986  cat Dockerfile 
+  987  EXPORT PYTHONPATH=/home/alert_stream/python:/home/sample-avro-alert/python
+  988  EXPORT
+  989  ls
+  990  EXPORT
+  991  ls
+  992  history
+  993  ls
+  994  pwd
+  995  PYTHONPATH=/home/stv/alert_stream/python:/home/stv/sample-avro-alert/python
+  996  ENV PYTHONPATH=/home/stv/alert_stream/python:/home/stv/sample-avro-alert/python
+  997  EXPORT
+  998  bash
+  999  exit
+ 1000  history
+ 1001  export PYTHONPATH=/home/stv/alert_stream/python:/home/stv/sample-avro-alert/python
+ 1002  ls
+ 1003  cd a
+ 1004  ls
+ 1005  cd alert_stream/
+ 1006  ls
+ 1007  history
+

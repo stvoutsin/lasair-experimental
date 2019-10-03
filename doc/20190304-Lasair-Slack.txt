@@ -1,0 +1,50 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2018, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+## Guide found here:
+https://api.slack.com/tutorials/slack-apps-hello-world
+
+
+## Checkout a Copy of LSST Alert stream code and run Kafka stream 
+
+	git clone https://github.com/lsst-dm/alert_stream
+	git checkout tickets/DM-17549
+
+	docker-compose up -d
+
+	docker run -it --rm \
+	--network=alertstream_default \
+	-v $PWD/data:/home/alert_stream/data:ro \
+	alert_stream python bin/sendAlertStream.py kafka:9092 my-stream
+
+
+	docker run -it --rm \
+	--network=alertstream_default \
+	alert_stream python bin/filterStream.py kafka:9092 my-stream 1
+
+	docker run -it --rm \
+	--network=alertstream_default \
+	alert_stream python bin/printStream.py kafka:9092 Filter001 1
+
+
+
+curl -X POST -H 'Content-type: application/json' --data '{"text":"Hello, World!"}' YOUR_WEBHOOK_URL_HERE

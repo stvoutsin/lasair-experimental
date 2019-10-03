@@ -1,0 +1,195 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2018, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+
+
+
+###############################################################
+## Creating a Docker Swarm and running a Spark Cluster on it ##
+###############################################################
+
+
+## -------------------------------------------------
+## Create Master VM 
+## -------------------------------------------------
+
+createvm Gworewia (master)
+..
+Domain Gworewia started
+
+ssh Stevedore@Gworewia
+
+    ## Initialize Swarm with VM's address
+
+    docker swarm init --advertise-addr 192.168.201.15
+
+        ....
+	Swarm initialized: current node (tkhj2d3z40x51vodr1a2b4n2h) is now a manager.
+
+	To add a worker to this swarm, run the following command:
+
+	    docker swarm join --token SWMTKN-1-66w8t157ufren0nv8kvdvh912va3y7wpzw6t7nbiz5xjt5vxbe-cvc3tg9bktu1likj06btd69x6 192.168.201.15:2377
+
+	To add a manager to this swarm, run 'docker swarm join-token manager' and follow the instructions.
+        ....
+
+    ## Create Spark-net network
+    docker network create --driver overlay spark-net
+
+    ## Fix Firewall issue
+    sudo su
+    firewall-cmd --add-port=2377/tcp --permanent
+    firewall-cmd --add-port=2377/tcp --permanent
+    firewall-cmd --add-port=7946/tcp --permanent
+    firewall-cmd --add-port=4789/tcp --permanent
+    firewall-cmd --add-port=4789/udp --permanent
+    iptables -A INPUT -p 50 -j ACCEPT    
+    firewall-cmd --reload
+    exit
+
+exit
+
+
+
+
+
+
+## -------------------------------------------------
+## Create Worker VM 
+## -------------------------------------------------
+
+createvm Astoalith (worker)
+Domain Astoalith started
+
+ssh Stevedore@Astoalith
+
+    docker swarm join --token SWMTKN-1-66w8t157ufren0nv8kvdvh912va3y7wpzw6t7nbiz5xjt5vxbe-cvc3tg9bktu1likj06btd69x6 192.168.201.15:2377
+      ...
+      This node joined a swarm as a worker.
+      ...
+
+      ## Fetch Spark Project source code (Need to do this on every Swarm node)
+      git clone https://github.com/stvoutsin/lasair-experimental
+
+    
+     ## Fix Firewall issue
+     sudo su
+     firewall-cmd --add-port=2377/tcp --permanent
+     firewall-cmd --add-port=2377/tcp --permanent
+     firewall-cmd --add-port=7946/tcp --permanent
+     firewall-cmd --add-port=4789/udp --permanent
+     firewall-cmd --add-port=4789/tcp --permanent
+     iptables -A INPUT -p 50 -j ACCEPT    
+     firewall-cmd --reload
+     exit
+
+
+
+## -------------------------------------------------
+## Fetch Spark Project and Deploy on Master Node
+## -------------------------------------------------
+
+ssh Stevedore@Gworewia
+
+## Fetch Spark Project source code
+pushd ${HOME}
+
+    git clone https://github.com/stvoutsin/lasair-experimental
+
+popd
+
+
+
+## -------------------------------------------------
+## Deploy Spark Stack
+## -------------------------------------------------
+
+pushd ${HOME}/lasair-experimental/spark/docker/compose/stack
+
+    docker stack deploy -c docker-compose.yml spark
+       ...
+
+	Creating network spark_spark-net
+	Creating service spark_spark-worker
+	Creating service spark_spark-worker-2
+	Creating service spark_spark-master
+
+      ...
+
+     docker ps
+	CONTAINER ID        IMAGE                                  COMMAND                  CREATED             STATUS              PORTS                          NAMES
+	85b15e4a4d10        bde2020/spark-master:2.4.0-hadoop2.7   "/bin/bash /master.sh"   13 minutes ago      Up 13 minutes       6066/tcp, 7077/tcp, 8080/tcp   spark_spark-master.1.2asigry7c8qaku970bhoscyke
+	960e02adac3e        bde2020/spark-worker:2.4.0-hadoop2.7   "/bin/bash /worker.sh"   13 minutes ago      Up 13 minutes       8081/tcp                       spark_spark-worker-2.1.j028cnf2pmfsjgeuejpgevgjw
+	0a66f1582b22        bde2020/spark-worker:2.4.0-hadoop2.7   "/bin/bash /worker.sh"   14 minutes ago      Up 13 minutes       8081/tcp                       spark_spark-worker.1.96qitf0kgu0szw1a8awqlj88j
+
+     ## Connect to Spark Master and submit job
+     docker exec -it 85b15e4a4d10 bash
+
+
+popd
+
+
+
+## -------------------------------------------------
+## Check Spark UI
+## -------------------------------------------------
+
+## stelios@stelios-pc
+ssh -L '*:8084:Gworewia:8080' Stevedore@Gworewia
+(Open browser at http://localhost:8084..)
+
+... 
+	URL: spark://85b15e4a4d10:7077
+	Alive Workers: 2
+	Cores in use: 8 Total, 0 Used
+...
+
+
+## Scaling Workers
+# We can also scale up the number of Spark workers as follows:
+  docker service scale spark_spark-worker=4
+
+# These correctly show up in Spark UI as Spark worker nodes, and are distributed using Swarm on the Worker VMs
+# So perhaps better to do this than define multiple workers in docker compose
+ 
+
+## -------------------------------------------------
+## Submit Job
+## -------------------------------------------------
+
+# Submitting jobs can either be done using a separate container, or in this example, by running the job from inside the Spark Master node.
+
+[Stevedore@Gworewia ~]$ docker exec -it 85b15e4a4d10 bash 
+
+bash-4.4# /spark/bin/spark-submit /app/app.py
+
+
+
+...
+
+
+Found 29 matches
+[[{'arcsec': 0.400620074197715, 'cone_id': 76141, 'name': u'KUV 00311-1938', 'objectId': u'ZTF18abtftkf', 'wl_id': 35, 'ndethist': 46}], [{'arcsec': 0.33467606695185426, 'cone_id': 76142, 'name': u'1ES 0033+595', 'objectId': u'ZTF19abgzjrh', 'wl_id': 35, 'ndethist': 2}], [{'arcsec': 0.1662871796475325, 'cone_id': 76144, 'name': u'3C 66A', 'objectId': u'ZTF18aabezmq', 'wl_id': 35, 'ndethist': 87}], [{'arcsec': 0.22974095717614754, 'cone_id': 76145, 'name': u'1ES 0229+200', 'objectId': u'ZTF18acsykeu', 'wl_id': 35, 'ndethist': 16}], [{'arcsec': 0.23133075098705513, 'cone_id': 76146, 'name': u'PKS 0301-243', 'objectId': u'ZTF18acebmhq', 'wl_id': 35, 'ndethist': 14}], [{'arcsec': 0.11868233217580097, 'cone_id': 76147, 'name': u'RBS 0413', 'objectId': u'ZTF18acebdlq', 'wl_id': 35, 'ndethist': 25}], [{'arcsec': 0.1005338758293374, 'cone_id': 76148, 'name': u'1ES 0347-121', 'objectId': u'ZTF18abuxvfk', 'wl_id': 35, 'ndethist': 4}], [{'arcsec': 0.2595087869846146, 'cone_id': 76149, 'name': u'1ES 0414+009', 'objectId': u'ZTF18acrvucs', 'wl_id': 35, 'ndethist': 60}], [{'arcsec': 0.1841842634646922, 'cone_id': 76151, 'name': u'1ES 0502+675', 'objectId': u'ZTF18abvfkym', 'wl_id': 35, 'ndethist': 30}], [{'arcsec': 0.10813856631788245, 'cone_id': 76153, 'name': u'RX J0648.7+1516', 'objectId': u'ZTF18abvmpjc', 'wl_id': 35, 'ndethist': 164}], [{'arcsec': 0.13933776693172092, 'cone_id': 76154, 'name': u'1ES 0647+250', 'objectId': u'ZTF17aadptpa', 'wl_id': 35, 'ndethist': 82}], [{'arcsec': 0.027836022440623862, 'cone_id': 76156, 'name': u'S5 0716+714', 'objectId': u'ZTF18abvtfpt', 'wl_id': 35, 'ndethist': 14}], [{'arcsec': 0.05853030776645684, 'cone_id': 76157, 'name': u'1ES 0806+524', 'objectId': u'ZTF18acbznzg', 'wl_id': 35, 'ndethist': 68}], [{'arcsec': 0.2498989208217886, 'cone_id': 76159, 'name': u'1ES 1011+496', 'objectId': u'ZTF18aajmxtj', 'wl_id': 35, 'ndethist': 21}, {'arcsec': 0.29874896838117904, 'cone_id': 76159, 'name': u'1ES 1011+496', 'objectId': u'ZTF18abalsiv', 'wl_id': 35, 'ndethist': 75}], [{'arcsec': 0.16165262983952913, 'cone_id': 76162, 'name': u'Markarian 180', 'objectId': u'ZTF18aakdfgo', 'wl_id': 35, 'ndethist': 72}], [{'arcsec': 0.12189657991231728, 'cone_id': 76163, 'name': u'1ES 1215+303', 'objectId': u'ZTF18aabxehk', 'wl_id': 35, 'ndethist': 158}, {'arcsec': 0.6759367324649533, 'cone_id': 76163, 'name': u'1ES 1215+303', 'objectId': u'ZTF18acurlrz', 'wl_id': 35, 'ndethist': 4}], [{'arcsec': 0.05058847788829838, 'cone_id': 76164, 'name': u'1ES 1218+304', 'objectId': u'ZTF18aacapwh', 'wl_id': 35, 'ndethist': 105}], [{'arcsec': 0.10280102420287003, 'cone_id': 76165, 'name': u'W Comae', 'objectId': u'ZTF17aaapqiz', 'wl_id': 35, 'ndethist': 117}], [{'arcsec': 0.12637603868918934, 'cone_id': 76167, 'name': u'PKS 1424+240', 'objectId': u'ZTF18aazhkrc', 'wl_id': 35, 'ndethist': 93}], [{'arcsec': 0.12186109292941122, 'cone_id': 76168, 'name': u'H 1426+428', 'objectId': u'ZTF18aaquoaj', 'wl_id': 35, 'ndethist': 6}], [{'arcsec': 0.605413894834733, 'cone_id': 76169, 'name': u'1ES 1440+122', 'objectId': u'ZTF18actubhl', 'wl_id': 35, 'ndethist': 89}], [{'arcsec': 0.07602221679392437, 'cone_id': 76170, 'name': u'AP Lib', 'objectId': u'ZTF19aardope', 'wl_id': 35, 'ndethist': 13}], [{'arcsec': 0.19165521406190683, 'cone_id': 76171, 'name': u'PG 1553+113', 'objectId': u'ZTF18aaylblx', 'wl_id': 35, 'ndethist': 69}], [{'arcsec': 0.14490190097972386, 'cone_id': 76172, 'name': u'Markarian 501', 'objectId': u'ZTF18aamndyk', 'wl_id': 35, 'ndethist': 77}, {'arcsec': 0.695898941160862, 'cone_id': 76172, 'name': u'Markarian 501', 'objectId': u'ZTF18aaltula', 'wl_id': 35, 'ndethist': 8}], [{'arcsec': 0.44757638307601083, 'cone_id': 76173, 'name': u'1ES 1741+196', 'objectId': u'ZTF18aaqzpsv', 'wl_id': 35, 'ndethist': 75}], [{'arcsec': 0.10796828119646353, 'cone_id': 76175, 'name': u'MAGIC J2001+435', 'objectId': u'ZTF18aaxdpoz', 'wl_id': 35, 'ndethist': 236}], [{'arcsec': 0.9649608526923297, 'cone_id': 76178, 'name': u'BL Lacertae', 'objectId': u'ZTF19abloacf', 'wl_id': 35, 'ndethist': 3}, {'arcsec': 0.10362219625496334, 'cone_id': 76178, 'name': u'BL Lacertae', 'objectId': u'ZTF18abmjhvi', 'wl_id': 35, 'ndethist': 88}], [{'arcsec': 0.06367381213113683, 'cone_id': 76179, 'name': u'B3 2247+381', 'objectId': u'ZTF18abmodtn', 'wl_id': 35, 'ndethist': 128}], [{'arcsec': 0.11060623770906537, 'cone_id': 76180, 'name': u'1ES 2344+514', 'objectId': u'ZTF18abbuwwg', 'wl_id': 35, 'ndethist': 132}]]
+Time taken: 25.3449680805 seconds
+
+
+
