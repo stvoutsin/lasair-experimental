@@ -14,7 +14,7 @@ RUN pip install tqdm==4.31.1
 RUN pip install hips==0.2
 RUN pip install --pre astroquery
 RUN pip install firethorn-utils
-RUN pip install firethorn.py
+RUN pip install firethorn
 
 RUN jupyter nbextension enable --py widgetsnbextension --sys-prefix
 RUN jupyter nbextension enable --py --sys-prefix ipyaladin
